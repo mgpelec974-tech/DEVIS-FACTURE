@@ -61,29 +61,30 @@ canvas { border:1px solid #000; width:100%; }
 
 <script>
 
-// CLIENTS
+// ================= CLIENTS =================
 let clients = JSON.parse(localStorage.getItem("clients")) || [];
 
 function saveClient(){
-let nom = client.value;
-if(!nom) return;
+let nom = document.getElementById("client").value;
+if(!nom) return alert("Nom client vide");
 clients.push(nom);
 localStorage.setItem("clients", JSON.stringify(clients));
 afficherClients();
 }
 
 function afficherClients(){
-clientList.innerHTML="";
+let select = document.getElementById("clientList");
+select.innerHTML="";
 clients.forEach(c=>{
-clientList.innerHTML+=`<option>${c}</option>`;
+select.innerHTML+=`<option>${c}</option>`;
 });
 }
 
 function selectClient(){
-client.value = clientList.value;
+document.getElementById("client").value = document.getElementById("clientList").value;
 }
 
-// LIGNES
+// ================= LIGNES =================
 function addLigne(){
 let div=document.createElement("div");
 div.innerHTML=`
@@ -91,11 +92,11 @@ div.innerHTML=`
 <input type="number" placeholder="Quantité">
 <input type="number" placeholder="Prix unitaire €">
 `;
-lignes.appendChild(div);
+document.getElementById("lignes").appendChild(div);
 }
 addLigne();
 
-// CALCUL
+// ================= CALCUL =================
 function calcul(){
 let total=0;
 
@@ -105,94 +106,107 @@ let prix=parseFloat(l.children[2].value||0);
 total+=qte*prix;
 });
 
-let remiseVal=total*(remise.value/100);
+let remiseVal=total*(parseFloat(document.getElementById("remise").value)/100);
 let ht=total-remiseVal;
-let tvaVal=ht*(tva.value/100);
+let tvaVal=ht*(parseFloat(document.getElementById("tva").value)/100);
 let ttc=ht+tvaVal;
 
 return {total,remiseVal,ht,tvaVal,ttc};
 }
 
-// NUMERO
+// ================= NUMERO =================
 function numero(type,list){
 return type+"-"+String(list.length+1).padStart(4,"0");
 }
 
-// GOOGLE SHEET
+// ================= GOOGLE SHEET =================
 function sendToSheet(type, numero, client, montant){
 fetch("https://script.google.com/macros/s/AKfycbxTjNb-hGf0kc5XaLTQWslhc6tRuwPwpmz7IcJzWfqxr4CWkEfX7tr4UKVW-xP3CL5W/exec",{
 method:"POST",
 headers:{"Content-Type":"application/json"},
 body:JSON.stringify({type,numero,client,montant})
-});
+}).catch(err=>console.log(err));
 }
 
-// DEVIS
+// ================= DEVIS =================
 let devis=JSON.parse(localStorage.getItem("devis"))||[];
 
 function saveDevis(){
 let c=calcul();
-let d={num:numero("DEV",devis),client:client.value,ttc:c.ttc};
+
+let d={
+num:numero("DEV",devis),
+client:document.getElementById("client").value,
+ttc:c.ttc
+};
+
 devis.push(d);
 localStorage.setItem("devis",JSON.stringify(devis));
+
 sendToSheet("DEVIS",d.num,d.client,d.ttc);
+
 afficher();
 }
 
-// FACTURE
+// ================= FACTURE =================
 let factures=JSON.parse(localStorage.getItem("factures"))||[];
 
 function toFacture(){
 let c=calcul();
-let f={num:numero("FAC",factures),client:client.value,ttc:c.ttc};
+
+let f={
+num:numero("FAC",factures),
+client:document.getElementById("client").value,
+ttc:c.ttc
+};
+
 factures.push(f);
 localStorage.setItem("factures",JSON.stringify(factures));
+
 sendToSheet("FACTURE",f.num,f.client,f.ttc);
+
 afficher();
 }
 
-// SIGNATURE
+// ================= SIGNATURE =================
 let canvas=document.getElementById("signature");
 let ctx=canvas.getContext("2d");
 let draw=false;
 
-canvas.onmousedown=()=>draw=true;
-canvas.onmouseup=()=>draw=false;
-canvas.onmousemove=e=>{
-if(!draw)return;
+canvas.addEventListener("mousedown",()=>draw=true);
+canvas.addEventListener("mouseup",()=>draw=false);
+canvas.addEventListener("mousemove",(e)=>{
+if(!draw) return;
 ctx.lineWidth=2;
 ctx.lineTo(e.offsetX,e.offsetY);
 ctx.stroke();
-};
+});
 
 function clearSign(){
 ctx.clearRect(0,0,canvas.width,canvas.height);
 }
 
-// PDF EXPERT
-async function pdf(){
+// ================= PDF (STABLE) =================
+function pdf(){
+
+try {
 
 const { jsPDF } = window.jspdf;
 let doc=new jsPDF();
 
-let img=new Image();
-img.src="logo-png.png";
+let c=calcul();
+let y=20;
 
-img.onload=function(){
-
-doc.addImage(img,"PNG",10,5,50,20);
-
+// TEXTE
 doc.setFontSize(16);
-doc.text("DEVIS",150,15);
+doc.text("MGP ELEC",10,10);
 
 doc.setFontSize(10);
-doc.text("MGP ELEC",10,30);
-doc.text("97440 Saint-André",10,35);
-doc.text("SIREN 929986180",10,40);
+doc.text("Client : "+document.getElementById("client").value,10,20);
 
-doc.text("Client : "+client.value,10,50);
+y=30;
 
-let y=65;
+// TABLE
 doc.text("Désignation",10,y);
 doc.text("Qté",100,y);
 doc.text("PU",130,y);
@@ -202,10 +216,8 @@ y+=5;
 doc.line(10,y,200,y);
 y+=5;
 
-let total=0;
-
 document.querySelectorAll("#lignes div").forEach(l=>{
-let nom=l.children[0].value;
+let nom=l.children[0].value||"";
 let qte=parseFloat(l.children[1].value||0);
 let prix=parseFloat(l.children[2].value||0);
 let t=qte*prix;
@@ -216,44 +228,40 @@ doc.text(prix.toFixed(2),130,y);
 doc.text(t.toFixed(2),160,y);
 
 y+=8;
-total+=t;
 });
 
-let c=calcul();
-
+// TOTAUX
 y+=10;
-
-doc.text("Sous-total : "+c.total.toFixed(2),130,y);
+doc.text("HT : "+c.ht.toFixed(2)+" €",130,y);
 y+=8;
-doc.text("Remise : -"+c.remiseVal.toFixed(2),130,y);
+doc.text("TVA : "+c.tvaVal.toFixed(2)+" €",130,y);
 y+=8;
-doc.text("HT : "+c.ht.toFixed(2),130,y);
-y+=8;
-doc.text("TVA : "+c.tvaVal.toFixed(2),130,y);
-y+=8;
-doc.text("TTC : "+c.ttc.toFixed(2),130,y);
+doc.text("TTC : "+c.ttc.toFixed(2)+" €",130,y);
 
-y+=20;
+// SIGNATURE
+let canvas=document.getElementById("signature");
+let img=canvas.toDataURL("image/png");
+doc.addImage(img,"PNG",10,y+10,60,20);
 
-let imgSign=canvas.toDataURL("image/png");
-doc.addImage(imgSign,"PNG",10,y,60,20);
+doc.save("MGP_ELEC.pdf");
 
-doc.text("Bon pour accord",10,y+25);
-
-doc.save("MGP_ELEC_EXPERT.pdf");
-
+} catch(e){
+alert("Erreur PDF : "+e.message);
 }
 
 }
 
-// AFFICHAGE
+// ================= AFFICHAGE =================
 function afficher(){
-historique.innerHTML="";
+let div=document.getElementById("historique");
+div.innerHTML="";
+
 devis.forEach(d=>{
-historique.innerHTML+=`📄 ${d.num} - ${d.client} - ${d.ttc.toFixed(2)}€<br>`;
+div.innerHTML+=`📄 ${d.num} - ${d.client} - ${d.ttc.toFixed(2)}€<br>`;
 });
+
 factures.forEach(f=>{
-historique.innerHTML+=`🧾 ${f.num} - ${f.client} - ${f.ttc.toFixed(2)}€<br>`;
+div.innerHTML+=`🧾 ${f.num} - ${f.client} - ${f.ttc.toFixed(2)}€<br>`;
 });
 }
 

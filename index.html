@@ -277,16 +277,25 @@ doc.text("Reste : "+reste.toFixed(2)+" €",10,y);
 }
 
 if(mode==="3fois"){
-let p1=p1.value;
-let p2=p2.value;
-let p3=p3.value;
+
+let p1 = parseFloat(document.getElementById("p1").value) || 0;
+let p2 = parseFloat(document.getElementById("p2").value) || 0;
+let p3 = parseFloat(document.getElementById("p3").value) || 0;
+
+doc.text("Paiement en 3 étapes :",10,y);
+y+=8;
 
 doc.text("Signature ("+p1+"%) : "+(c.ttc*p1/100).toFixed(2)+" €",10,y);
 y+=8;
-doc.text("Milieu ("+p2+"%) : "+(c.ttc*p2/100).toFixed(2)+" €",10,y);
+
+doc.text("Milieu chantier ("+p2+"%) : "+(c.ttc*p2/100).toFixed(2)+" €",10,y);
 y+=8;
-doc.text("Fin ("+p3+"%) : "+(c.ttc*p3/100).toFixed(2)+" €",10,y);
+
+doc.text("Fin chantier ("+p3+"%) : "+(c.ttc*p3/100).toFixed(2)+" €",10,y);
+
 }
+
+
 
 // SIGNATURE
 let img=canvas.toDataURL("image/png");

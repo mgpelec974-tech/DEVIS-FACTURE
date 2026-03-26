@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>MGP ELEC - EXPERT</title>
+<title>MGP ELEC - ENTREPRISE</title>
 
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
@@ -13,310 +13,166 @@ body { font-family: Arial; background:#f5f5f5; margin:10px; }
 .card { background:white; padding:15px; margin:10px 0; border-radius:10px; }
 input, select { width:100%; padding:10px; margin:5px 0; }
 button { width:100%; padding:12px; margin:5px 0; background:#d62828; color:white; border:none; border-radius:8px; }
-.logo { text-align:center; }
-.logo img { height:80px; }
 canvas { border:1px solid #000; width:100%; }
 </style>
 </head>
 
 <body>
 
-<div class="logo">
-<img src="logo-png.png">
-</div>
-
-<h2 style="text-align:center;">MGP ELEC ⚡</h2>
+<h2>MGP ELEC ⚡</h2>
 
 <div class="card">
 
-<h3>Client</h3>
-<input id="client" placeholder="Nom client">
-<button onclick="saveClient()">➕ Ajouter client</button>
-<select id="clientList" onchange="selectClient()"></select>
+<input id="client" placeholder="Client">
 
-<h3>Prestations</h3>
 <div id="lignes"></div>
-<button onclick="addLigne()">➕ Ajouter ligne</button>
+<button onclick="addLigne()">Ajouter ligne</button>
 
-<label>Remise (%)</label>
 <input id="remise" value="30">
-
-<label>TVA (%)</label>
 <input id="tva" value="8.5">
 
-<h3>Mode de paiement</h3>
 <select id="modePaiement">
 <option value="acompte">Acompte 40%</option>
-<option value="3fois">Paiement en 3 étapes</option>
+<option value="3fois">3 paiements</option>
 </select>
 
-<div id="paiement3x" style="display:none;">
-<label>Signature (%)</label>
-<input id="p1" value="30">
-<label>Milieu chantier (%)</label>
-<input id="p2" value="40">
-<label>Fin chantier (%)</label>
-<input id="p3" value="30">
-</div>
-
-<h3>Signature client</h3>
-<canvas id="signature" height="100"></canvas>
-<button onclick="clearSign()">Effacer signature</button>
-
-<button onclick="saveDevis()">💾 Devis</button>
-<button onclick="toFacture()">🧾 Facture</button>
-<button onclick="pdf()">📄 PDF PRO</button>
+<button onclick="saveFacture()">Créer facture</button>
+<button onclick="pdf()">PDF</button>
 
 </div>
 
 <div class="card">
-<h3>Historique</h3>
-<div id="historique"></div>
+<h3>Suivi paiement</h3>
+<div id="suivi"></div>
+</div>
+
+<div class="card">
+<h3>Chiffre d'affaires</h3>
+<div id="ca"></div>
 </div>
 
 <script>
 
-// ================= CLIENTS =================
-let clients = JSON.parse(localStorage.getItem("clients")) || [];
-
-function saveClient(){
-let nom = document.getElementById("client").value;
-if(!nom) return alert("Nom client vide");
-
-if(!clients.includes(nom)){
-clients.push(nom);
-localStorage.setItem("clients", JSON.stringify(clients));
-}
-
-afficherClients();
-}
-
-function afficherClients(){
-let select = document.getElementById("clientList");
-select.innerHTML="<option value=''>--Choisir client--</option>";
-clients.forEach(c=>{
-let option=document.createElement("option");
-option.value=c;
-option.textContent=c;
-select.appendChild(option);
-});
-}
-
-function selectClient(){
-document.getElementById("client").value = document.getElementById("clientList").value;
-}
-
-window.onload = afficherClients;
-
-// ================= LIGNES =================
+// LIGNES
 function addLigne(){
 let div=document.createElement("div");
 div.innerHTML=`
 <input placeholder="Désignation">
-<input type="number" placeholder="Quantité" value="1">
-<input type="number" placeholder="Prix unitaire €" value="0">
+<input type="number" value="1">
+<input type="number" value="0">
 `;
-document.getElementById("lignes").appendChild(div);
+lignes.appendChild(div);
 }
 addLigne();
 
-// ================= CALCUL =================
+// CALCUL
 function calcul(){
 let total=0;
-
 document.querySelectorAll("#lignes div").forEach(l=>{
-let qte=parseFloat(l.children[1].value||0);
-let prix=parseFloat(l.children[2].value||0);
-total+=qte*prix;
+let q=l.children[1].value;
+let p=l.children[2].value;
+total+=q*p;
 });
-
-let remiseVal=total*(parseFloat(document.getElementById("remise").value)/100);
+let remiseVal=total*(remise.value/100);
 let ht=total-remiseVal;
-let tvaVal=ht*(parseFloat(document.getElementById("tva").value)/100);
+let tvaVal=ht*(tva.value/100);
 let ttc=ht+tvaVal;
-
 return {total,remiseVal,ht,tvaVal,ttc};
 }
 
-// ================= NUMERO =================
-function numero(type,list){
-return type+"-"+String(list.length+1).padStart(4,"0");
+// NUMERO
+function numero(){
+return "FAC-"+Date.now();
 }
 
-// ================= GOOGLE SHEET =================
-function sendToSheet(type, numero, client, montant){
-fetch("https://script.google.com/macros/s/AKfycbxTjNb-hGf0kc5XaLTQWslhc6tRuwPwpmz7IcJzWfqxr4CWkEfX7tr4UKVW-xP3CL5W/exec",{
-method:"POST",
-headers:{"Content-Type":"application/json"},
-body:JSON.stringify({type,numero,client,montant})
-});
-}
-
-// ================= DEVIS =================
-let devis=JSON.parse(localStorage.getItem("devis"))||[];
-
-function saveDevis(){
-let c=calcul();
-let d={num:numero("DEV",devis),client:client.value,ttc:c.ttc};
-
-devis.push(d);
-localStorage.setItem("devis",JSON.stringify(devis));
-
-sendToSheet("DEVIS",d.num,d.client,d.ttc);
-afficher();
-}
-
-// ================= FACTURE =================
+// FACTURES
 let factures=JSON.parse(localStorage.getItem("factures"))||[];
 
-function toFacture(){
+function saveFacture(){
+
 let c=calcul();
-let f={num:numero("FAC",factures),client:client.value,ttc:c.ttc};
+
+let f={
+num:numero(),
+client:client.value,
+ttc:c.ttc,
+paye:false
+};
 
 factures.push(f);
 localStorage.setItem("factures",JSON.stringify(factures));
 
-sendToSheet("FACTURE",f.num,f.client,f.ttc);
 afficher();
 }
 
-// ================= SIGNATURE =================
-let canvas=document.getElementById("signature");
-let ctx=canvas.getContext("2d");
-let draw=false;
-
-canvas.addEventListener("mousedown",()=>draw=true);
-canvas.addEventListener("mouseup",()=>draw=false);
-canvas.addEventListener("mousemove",(e)=>{
-if(!draw)return;
-ctx.lineWidth=2;
-ctx.lineTo(e.offsetX,e.offsetY);
-ctx.stroke();
-});
-
-function clearSign(){
-ctx.clearRect(0,0,canvas.width,canvas.height);
+// SUIVI PAIEMENT
+function togglePaiement(i){
+factures[i].paye=!factures[i].paye;
+localStorage.setItem("factures",JSON.stringify(factures));
+afficher();
 }
 
-// ================= MODE PAIEMENT =================
-document.getElementById("modePaiement").addEventListener("change", function(){
-document.getElementById("paiement3x").style.display =
-this.value==="3fois"?"block":"none";
+// AFFICHAGE
+function afficher(){
+
+// suivi
+suivi.innerHTML="";
+let totalCA=0;
+
+factures.forEach((f,i)=>{
+suivi.innerHTML+=`
+${f.num} - ${f.client} - ${f.ttc.toFixed(2)} €
+<button onclick="togglePaiement(${i})">
+${f.paye?"✅ Payé":"❌ Non payé"}
+</button><br>`;
+if(f.paye) totalCA+=f.ttc;
 });
 
-// ================= PDF PRO =================
+// CA
+ca.innerHTML="Chiffre d'affaires encaissé : "+totalCA.toFixed(2)+" €";
+
+}
+
+afficher();
+
+// PDF
 function pdf(){
 
 const { jsPDF } = window.jspdf;
 let doc=new jsPDF();
 
 let c=calcul();
-let y=20;
 
-// ENTETE
-doc.setFontSize(16);
+doc.text("FACTURE",150,10);
 doc.text("MGP ELEC",10,10);
+doc.text("SIREN 929986180",10,15);
+doc.text("Client : "+client.value,10,25);
+doc.text("Date : "+new Date().toLocaleDateString(),150,20);
 
-doc.setFontSize(10);
-doc.text("314 chemin jeanson",10,15);
-doc.text("97440 Saint-André",10,20);
-doc.text("SIREN : 929986180",10,25);
-
-doc.text("Client : "+client.value,10,35);
-doc.text("Date : "+new Date().toLocaleDateString(),140,15);
-
-// TABLEAU
-y=45;
-
-doc.text("Désignation",10,y);
-doc.text("Qté",100,y);
-doc.text("PU",130,y);
-doc.text("Total",160,y);
-
-y+=5;
-doc.line(10,y,200,y);
-y+=5;
+let y=40;
 
 document.querySelectorAll("#lignes div").forEach(l=>{
-let nom=l.children[0].value||"";
-let qte=parseFloat(l.children[1].value)||0;
-let prix=parseFloat(l.children[2].value)||0;
-let t=qte*prix;
-
-doc.text(nom,10,y);
-doc.text(qte.toString(),100,y);
-doc.text(prix.toFixed(2),130,y);
-doc.text(t.toFixed(2),160,y);
-
+let nom=l.children[0].value;
+let q=l.children[1].value;
+let p=l.children[2].value;
+doc.text(nom+" x"+q+" = "+(q*p)+" €",10,y);
 y+=8;
 });
 
-// TOTAUX
 y+=10;
-doc.text("Sous-total HT : "+c.total.toFixed(2),130,y);
-y+=8;
-doc.text("Remise : -"+c.remiseVal.toFixed(2),130,y);
-y+=8;
+
 doc.text("HT : "+c.ht.toFixed(2),130,y);
 y+=8;
 doc.text("TVA : "+c.tvaVal.toFixed(2),130,y);
 y+=8;
 doc.text("TTC : "+c.ttc.toFixed(2),130,y);
 
-// 🔥 MODE PAIEMENT
-let mode=document.getElementById("modePaiement").value;
-y+=15;
+y+=10;
+doc.text("IBAN : FR76 4061 8803 3500 0407 1416 017",10,y);
 
-if(mode==="acompte"){
-let acompte=c.ttc*0.40;
-let reste=c.ttc-acompte;
-
-doc.text("Acompte (40%) : "+acompte.toFixed(2)+" €",10,y);
-y+=8;
-doc.text("Reste : "+reste.toFixed(2)+" €",10,y);
-}
-
-if(mode==="3fois"){
-
-let p1 = parseFloat(document.getElementById("p1").value) || 0;
-let p2 = parseFloat(document.getElementById("p2").value) || 0;
-let p3 = parseFloat(document.getElementById("p3").value) || 0;
-
-doc.text("Paiement en 3 étapes :",10,y);
-y+=8;
-
-doc.text("Signature ("+p1+"%) : "+(c.ttc*p1/100).toFixed(2)+" €",10,y);
-y+=8;
-
-doc.text("Milieu chantier ("+p2+"%) : "+(c.ttc*p2/100).toFixed(2)+" €",10,y);
-y+=8;
-
-doc.text("Fin chantier ("+p3+"%) : "+(c.ttc*p3/100).toFixed(2)+" €",10,y);
+doc.save("facture.pdf");
 
 }
-
-
-
-// SIGNATURE
-let img=canvas.toDataURL("image/png");
-doc.addImage(img,"PNG",10,y+10,60,20);
-
-doc.save("MGP_ELEC.pdf");
-
-}
-
-// ================= AFFICHAGE =================
-function afficher(){
-historique.innerHTML="";
-devis.forEach(d=>{
-historique.innerHTML+=`📄 ${d.num} - ${d.client} - ${d.ttc.toFixed(2)}€<br>`;
-});
-factures.forEach(f=>{
-historique.innerHTML+=`🧾 ${f.num} - ${f.client} - ${f.ttc.toFixed(2)}€<br>`;
-});
-}
-
-afficher();
 
 </script>
 

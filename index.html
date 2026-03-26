@@ -189,65 +189,111 @@ ctx.clearRect(0,0,canvas.width,canvas.height);
 // ================= PDF (STABLE) =================
 function pdf(){
 
-try {
-
 const { jsPDF } = window.jspdf;
-let doc=new jsPDF();
+let doc = new jsPDF();
 
-let c=calcul();
-let y=20;
+let client = document.getElementById("client").value;
+let lignes = document.querySelectorAll("#lignes div");
 
-// TEXTE
+let y = 20;
+let total = 0;
+
+// 🔥 ENTETE
 doc.setFontSize(16);
-doc.text("MGP ELEC",10,10);
+doc.text("MGP ELEC", 10, 10);
 
 doc.setFontSize(10);
-doc.text("Client : "+document.getElementById("client").value,10,20);
+doc.text("314 chemin jeanson", 10, 15);
+doc.text("97440 Saint-André", 10, 20);
+doc.text("SIREN : 929986180", 10, 25);
 
-y=30;
+doc.text("Devis N° : " + Date.now(), 140, 10);
+doc.text("Date : " + new Date().toLocaleDateString(), 140, 15);
 
-// TABLE
-doc.text("Désignation",10,y);
-doc.text("Qté",100,y);
-doc.text("PU",130,y);
-doc.text("Total",160,y);
+doc.text("Client : " + client, 10, 35);
 
-y+=5;
-doc.line(10,y,200,y);
-y+=5;
+// 🔥 TABLEAU
+y = 45;
 
-document.querySelectorAll("#lignes div").forEach(l=>{
-let nom=l.children[0].value||"";
-let qte=parseFloat(l.children[1].value||0);
-let prix=parseFloat(l.children[2].value||0);
-let t=qte*prix;
+doc.setFontSize(10);
+doc.text("Désignation", 10, y);
+doc.text("Qté", 100, y);
+doc.text("PU €", 120, y);
+doc.text("TVA", 145, y);
+doc.text("Total €", 170, y);
 
-doc.text(nom,10,y);
-doc.text(qte.toString(),100,y);
-doc.text(prix.toFixed(2),130,y);
-doc.text(t.toFixed(2),160,y);
+y += 5;
+doc.line(10, y, 200, y);
+y += 5;
 
-y+=8;
+// 🔥 LIGNES
+lignes.forEach(l => {
+
+let nom = l.children[0].value || "";
+let qte = parseFloat(l.children[1].value) || 0;
+let prix = parseFloat(l.children[2].value) || 0;
+
+let totalLigne = qte * prix;
+
+doc.text(nom, 10, y);
+doc.text(qte.toString(), 100, y);
+doc.text(prix.toFixed(2), 120, y);
+doc.text("8.5%", 145, y);
+doc.text(totalLigne.toFixed(2), 170, y);
+
+y += 8;
+total += totalLigne;
+
 });
 
-// TOTAUX
-y+=10;
-doc.text("HT : "+c.ht.toFixed(2)+" €",130,y);
-y+=8;
-doc.text("TVA : "+c.tvaVal.toFixed(2)+" €",130,y);
-y+=8;
-doc.text("TTC : "+c.ttc.toFixed(2)+" €",130,y);
+// 🔥 CALCULS
+let remise = total * 0.30;
+let totalHT = total - remise;
+let tva = totalHT * 0.085;
+let ttc = totalHT + tva;
 
-// SIGNATURE
-let canvas=document.getElementById("signature");
-let img=canvas.toDataURL("image/png");
-doc.addImage(img,"PNG",10,y+10,60,20);
+y += 10;
 
-doc.save("MGP_ELEC.pdf");
+// 🔥 TOTAUX
+doc.text("Sous-total HT : " + total.toFixed(2) + " €", 130, y);
+y += 8;
+doc.text("Remise HT (30%) : -" + remise.toFixed(2) + " €", 130, y);
+y += 8;
+doc.text("Total HT : " + totalHT.toFixed(2) + " €", 130, y);
+y += 8;
+doc.text("TVA 8.5% : " + tva.toFixed(2) + " €", 130, y);
+y += 8;
 
-} catch(e){
-alert("Erreur PDF : "+e.message);
-}
+doc.setFontSize(12);
+doc.text("TOTAL TTC : " + ttc.toFixed(2) + " €", 130, y);
+
+// 🔥 MENTIONS
+y += 15;
+
+doc.setFontSize(8);
+doc.text("Pour être accepté, le devis doit être daté, signé et suivi de la mention 'Bon pour accord'.", 10, y);
+
+y += 10;
+doc.text("Banque: BoursoBank - BIC: BOUS FRPP XXX", 10, y);
+y += 5;
+doc.text("IBAN: FR76 4061 8803 3500 0407 1416 017", 10, y);
+
+y += 10;
+doc.text("MGP ELEC - SIREN 929986180 - RC PRO - ASSURANCE DECENNALE APRIL: W4183819", 10, y);
+
+// 🔥 SIGNATURE
+y += 20;
+doc.text("Signature client :", 10, y);
+
+let canvas = document.getElementById("signature");
+let img = canvas.toDataURL("image/png");
+doc.addImage(img, "PNG", 10, y + 5, 60, 20);
+
+y += 30;
+doc.text("Bon pour accord", 10, y);
+
+// 🔥 EXPORT
+doc.save("Devis_MGP_ELEC.pdf");
 
 }
 

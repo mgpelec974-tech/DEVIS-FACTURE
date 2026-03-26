@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>MGP ELEC - Gestion</title>
+<title>MGP ELEC - PRO</title>
 
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
@@ -10,10 +10,9 @@
 
 <style>
 body { font-family: Arial; margin: 10px; background:#f5f5f5; }
-.card { background:white; padding:15px; border-radius:10px; margin:10px 0; box-shadow:0 2px 5px rgba(0,0,0,0.1); }
+.card { background:white; padding:15px; border-radius:10px; margin:10px 0; }
 input, select { padding:10px; margin:5px 0; width:100%; }
-button { padding:12px; margin:5px 0; width:100%; border:none; border-radius:8px; background:#d62828; color:white; font-weight:bold; }
-h1 { text-align:center; color:#d62828; }
+button { padding:12px; margin:5px 0; width:100%; background:#d62828; color:white; border:none; border-radius:8px; }
 .logo { text-align:center; }
 .logo img { height:80px; }
 </style>
@@ -25,12 +24,12 @@ h1 { text-align:center; color:#d62828; }
 <img src="logo-png.png">
 </div>
 
-<h1>MGP ELEC ⚡</h1>
+<h1 style="text-align:center;">MGP ELEC ⚡</h1>
 
 <div class="card">
 
 <h3>Client</h3>
-<input type="text" id="client" placeholder="Nom client">
+<input id="client" placeholder="Nom client">
 <button onclick="saveClient()">➕ Ajouter client</button>
 <select id="clientList" onchange="selectClient()"></select>
 
@@ -39,11 +38,11 @@ h1 { text-align:center; color:#d62828; }
 <button onclick="addLigne()">➕ Ajouter ligne</button>
 
 <label>TVA (%)</label>
-<input type="number" id="tva" value="8.5">
+<input id="tva" value="8.5">
 
-<button onclick="saveDevis()">💾 Enregistrer devis</button>
-<button onclick="toFacture()">🧾 Générer facture</button>
-<button onclick="pdf()">📄 PDF client</button>
+<button onclick="saveDevis()">💾 Devis</button>
+<button onclick="toFacture()">🧾 Facture</button>
+<button onclick="pdf()">📄 PDF PRO</button>
 
 </div>
 
@@ -54,190 +53,197 @@ h1 { text-align:center; color:#d62828; }
 
 <script>
 
-// ================= CLIENTS =================
+// CLIENTS
 let clients = JSON.parse(localStorage.getItem("clients")) || [];
 
 function saveClient(){
-    let nom = document.getElementById("client").value;
-    if(!nom) return alert("Nom vide");
-    clients.push(nom);
-    localStorage.setItem("clients", JSON.stringify(clients));
-    afficherClients();
+let nom = client.value;
+if(!nom) return;
+clients.push(nom);
+localStorage.setItem("clients", JSON.stringify(clients));
+afficherClients();
 }
 
 function afficherClients(){
-    let select = document.getElementById("clientList");
-    select.innerHTML = "";
-    clients.forEach(c=>{
-        select.innerHTML += `<option>${c}</option>`;
-    });
+clientList.innerHTML="";
+clients.forEach(c=>{
+clientList.innerHTML+=`<option>${c}</option>`;
+});
 }
 
 function selectClient(){
-    document.getElementById("client").value = document.getElementById("clientList").value;
+client.value = clientList.value;
 }
 
-// ================= LIGNES =================
+// LIGNES
 function addLigne(){
-    let div = document.createElement("div");
-    div.innerHTML = `
-    <input placeholder="Désignation">
-    <input type="number" placeholder="Prix €">
-    `;
-    document.getElementById("lignes").appendChild(div);
+let div = document.createElement("div");
+div.innerHTML = `
+<input placeholder="Désignation">
+<input type="number" placeholder="Prix €">
+`;
+lignes.appendChild(div);
 }
 
 addLigne();
 
-// ================= CALCUL =================
+// CALCUL
 function totalHT(){
-    let lignes = document.querySelectorAll("#lignes div");
-    let total = 0;
-
-    lignes.forEach(l=>{
-        let prix = l.children[1].value;
-        total += parseFloat(prix || 0);
-    });
-
-    return total;
+let total=0;
+document.querySelectorAll("#lignes div").forEach(l=>{
+total+=parseFloat(l.children[1].value||0);
+});
+return total;
 }
 
-// ================= NUMERO =================
-function numero(type, list){
-    return type + "-" + String(list.length+1).padStart(3,"0");
+// NUMERO
+function numero(type,list){
+return type+"-"+String(list.length+1).padStart(3,"0");
 }
 
-// ================= GOOGLE SHEET =================
+// GOOGLE SHEET
 function sendToSheet(type, numero, client, montant){
 
-fetch("https://script.google.com/macros/s/AKfycbxTjNb-hGf0kc5XaLTQWslhc6tRuwPwpmz7IcJzWfqxr4CWkEfX7tr4UKVW-xP3CL5W/exec", {
-    method: "POST",
-    headers: {
-        "Content-Type": "application/json"
-    },
-    body: JSON.stringify({
-        type: type,
-        numero: numero,
-        client: client,
-        montant: montant
-    })
-})
-.then(() => console.log("✅ Envoyé à Google Sheet"))
-.catch(err => console.error("❌ Erreur :", err));
+fetch("https://script.google.com/macros/s/AKfycbxTjNb-hGf0kc5XaLTQWslhc6tRuwPwpmz7IcJzWfqxr4CWkEfX7tr4UKVW-xP3CL5W/exec",{
+method:"POST",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify({type,numero,client,montant})
+});
 
 }
 
-// ================= DEVIS =================
+// DEVIS
 let devis = JSON.parse(localStorage.getItem("devis")) || [];
 
 function saveDevis(){
+let ht = totalHT();
+let tva = 8.5;
+let remise = ht*0.30;
+let totalHTremise = ht-remise;
+let ttc = totalHTremise*(1+tva/100);
 
-    let client = document.getElementById("client").value;
-    let ht = totalHT();
-    let tva = parseFloat(document.getElementById("tva").value);
+let d={
+num:numero("DEV",devis),
+client:client.value,
+ttc
+};
 
-    let montantTVA = ht * (tva/100);
-    let ttc = ht + montantTVA;
+devis.push(d);
+localStorage.setItem("devis",JSON.stringify(devis));
 
-    let d = {
-        num: numero("DEV", devis),
-        client,
-        ht,
-        tva,
-        ttc
-    };
+sendToSheet("DEVIS", d.num, d.client, d.ttc);
 
-    devis.push(d);
-    localStorage.setItem("devis", JSON.stringify(devis));
-
-    sendToSheet("DEVIS", d.num, d.client, d.ttc);
-
-    afficher();
+afficher();
 }
 
-// ================= FACTURE =================
+// FACTURE
 let factures = JSON.parse(localStorage.getItem("factures")) || [];
 
 function toFacture(){
+let ht = totalHT();
+let tva = 8.5;
+let remise = ht*0.30;
+let totalHTremise = ht-remise;
+let ttc = totalHTremise*(1+tva/100);
 
-    let client = document.getElementById("client").value;
-    let ht = totalHT();
-    let tva = parseFloat(document.getElementById("tva").value);
+let f={
+num:numero("FAC",factures),
+client:client.value,
+ttc
+};
 
-    let montantTVA = ht * (tva/100);
-    let ttc = ht + montantTVA;
+factures.push(f);
+localStorage.setItem("factures",JSON.stringify(factures));
 
-    let f = {
-        num: numero("FAC", factures),
-        client,
-        ht,
-        tva,
-        ttc
-    };
+sendToSheet("FACTURE", f.num, f.client, f.ttc);
 
-    factures.push(f);
-    localStorage.setItem("factures", JSON.stringify(factures));
-
-    sendToSheet("FACTURE", f.num, f.client, f.ttc);
-
-    afficher();
+afficher();
 }
 
-// ================= PDF =================
+// PDF PRO
 async function pdf(){
 
-    const { jsPDF } = window.jspdf;
-    let doc = new jsPDF();
+const { jsPDF } = window.jspdf;
+let doc = new jsPDF();
 
-    let client = document.getElementById("client").value;
-    let lignes = document.querySelectorAll("#lignes div");
+let total=0;
+let y=20;
 
-    let y = 20;
-    let total = 0;
+// LOGO
+let img=new Image();
+img.src="logo-png.png";
 
-    doc.setFontSize(18);
-    doc.text("MGP ELEC", 10, 10);
+img.onload=function(){
 
-    doc.setFontSize(12);
-    doc.text("Client : " + client, 10, y);
-    y += 10;
+doc.addImage(img,"PNG",10,5,50,20);
 
-    lignes.forEach(l=>{
-        let nom = l.children[0].value;
-        let prix = parseFloat(l.children[1].value || 0);
+doc.text("DEVIS",150,15);
 
-        doc.text(nom + " - " + prix + "€", 10, y);
-        y += 10;
-        total += prix;
-    });
+doc.setFontSize(10);
+doc.text("MGP ELEC",10,30);
+doc.text("97440 Saint-André",10,35);
+doc.text("SIREN 929986180",10,40);
 
-    let tva = parseFloat(document.getElementById("tva").value);
-    let montantTVA = total * (tva/100);
-    let ttc = total + montantTVA;
+doc.text("Client : "+client.value,10,50);
 
-    y += 10;
-    doc.text("HT : " + total + " €", 10, y);
-    y += 10;
-    doc.text("TVA : " + montantTVA + " €", 10, y);
-    y += 10;
-    doc.text("TTC : " + ttc + " €", 10, y);
+y=65;
 
-    doc.save("MGP_ELEC.pdf");
+// TABLE
+doc.text("Désignation",10,y);
+doc.text("Prix",150,y);
+
+y+=5;
+doc.line(10,y,200,y);
+y+=5;
+
+document.querySelectorAll("#lignes div").forEach(l=>{
+let nom=l.children[0].value;
+let prix=parseFloat(l.children[1].value||0);
+
+doc.text(nom,10,y);
+doc.text(prix+" €",150,y);
+
+y+=8;
+total+=prix;
+});
+
+// CALCULS
+let remise=total*0.30;
+let ht=total-remise;
+let tva=ht*0.085;
+let ttc=ht+tva;
+
+y+=10;
+
+doc.text("Sous-total HT : "+total.toFixed(2),130,y);
+y+=8;
+doc.text("Remise 30% : -"+remise.toFixed(2),130,y);
+y+=8;
+doc.text("Total HT : "+ht.toFixed(2),130,y);
+y+=8;
+doc.text("TVA : "+tva.toFixed(2),130,y);
+y+=8;
+doc.text("TOTAL TTC : "+ttc.toFixed(2),130,y);
+
+y+=20;
+
+doc.text("Bon pour accord",10,y);
+
+doc.save("Devis_MGP_ELEC.pdf");
+
 }
 
-// ================= AFFICHAGE =================
+}
+
+// AFFICHAGE
 function afficher(){
-
-    let div = document.getElementById("historique");
-    div.innerHTML = "";
-
-    devis.forEach(d=>{
-        div.innerHTML += `📄 ${d.num} - ${d.client} - ${d.ttc}€<br>`;
-    });
-
-    factures.forEach(f=>{
-        div.innerHTML += `🧾 ${f.num} - ${f.client} - ${f.ttc}€<br>`;
-    });
+historique.innerHTML="";
+devis.forEach(d=>{
+historique.innerHTML+=`📄 ${d.num} - ${d.client} - ${d.ttc}€<br>`;
+});
+factures.forEach(f=>{
+historique.innerHTML+=`🧾 ${f.num} - ${f.client} - ${f.ttc}€<br>`;
+});
 }
 
 afficher();

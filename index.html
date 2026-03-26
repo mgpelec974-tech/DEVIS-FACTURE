@@ -44,13 +44,28 @@ canvas { border:1px solid #000; width:100%; }
 <label>TVA (%)</label>
 <input id="tva" value="8.5">
 
+<h3>Mode de paiement</h3>
+<select id="modePaiement">
+<option value="acompte">Acompte 40%</option>
+<option value="3fois">Paiement en 3 étapes</option>
+</select>
+
+<div id="paiement3x" style="display:none;">
+<label>Signature (%)</label>
+<input id="p1" value="30">
+<label>Milieu chantier (%)</label>
+<input id="p2" value="40">
+<label>Fin chantier (%)</label>
+<input id="p3" value="30">
+</div>
+
 <h3>Signature client</h3>
 <canvas id="signature" height="100"></canvas>
 <button onclick="clearSign()">Effacer signature</button>
 
 <button onclick="saveDevis()">💾 Devis</button>
 <button onclick="toFacture()">🧾 Facture</button>
-<button onclick="pdf()">📄 PDF EXPERT</button>
+<button onclick="pdf()">📄 PDF PRO</button>
 
 </div>
 
@@ -62,61 +77,44 @@ canvas { border:1px solid #000; width:100%; }
 <script>
 
 // ================= CLIENTS =================
-// ================= CLIENTS =================
 let clients = JSON.parse(localStorage.getItem("clients")) || [];
 
 function saveClient(){
-    let nom = document.getElementById("client").value;
+let nom = document.getElementById("client").value;
+if(!nom) return alert("Nom client vide");
 
-    if(!nom){
-        alert("Entre un nom client");
-        return;
-    }
+if(!clients.includes(nom)){
+clients.push(nom);
+localStorage.setItem("clients", JSON.stringify(clients));
+}
 
-    // éviter doublons
-    if(!clients.includes(nom)){
-        clients.push(nom);
-        localStorage.setItem("clients", JSON.stringify(clients));
-    }
-
-    afficherClients();
-
-    alert("✅ Client enregistré");
+afficherClients();
 }
 
 function afficherClients(){
-    let select = document.getElementById("clientList");
-
-    select.innerHTML = "<option value=''>-- Sélectionner un client --</option>";
-
-    clients.forEach(c=>{
-        let option = document.createElement("option");
-        option.value = c;
-        option.textContent = c;
-        select.appendChild(option);
-    });
+let select = document.getElementById("clientList");
+select.innerHTML="<option value=''>--Choisir client--</option>";
+clients.forEach(c=>{
+let option=document.createElement("option");
+option.value=c;
+option.textContent=c;
+select.appendChild(option);
+});
 }
 
 function selectClient(){
-    let selected = document.getElementById("clientList").value;
-
-    if(selected){
-        document.getElementById("client").value = selected;
-    }
+document.getElementById("client").value = document.getElementById("clientList").value;
 }
 
-// 🔥 IMPORTANT : charger au démarrage
-window.onload = function(){
-    afficherClients();
-}
+window.onload = afficherClients;
 
 // ================= LIGNES =================
 function addLigne(){
 let div=document.createElement("div");
 div.innerHTML=`
 <input placeholder="Désignation">
-<input type="number" placeholder="Quantité">
-<input type="number" placeholder="Prix unitaire €">
+<input type="number" placeholder="Quantité" value="1">
+<input type="number" placeholder="Prix unitaire €" value="0">
 `;
 document.getElementById("lignes").appendChild(div);
 }
@@ -151,7 +149,7 @@ fetch("https://script.google.com/macros/s/AKfycbxTjNb-hGf0kc5XaLTQWslhc6tRuwPwpm
 method:"POST",
 headers:{"Content-Type":"application/json"},
 body:JSON.stringify({type,numero,client,montant})
-}).catch(err=>console.log(err));
+});
 }
 
 // ================= DEVIS =================
@@ -159,18 +157,12 @@ let devis=JSON.parse(localStorage.getItem("devis"))||[];
 
 function saveDevis(){
 let c=calcul();
-
-let d={
-num:numero("DEV",devis),
-client:document.getElementById("client").value,
-ttc:c.ttc
-};
+let d={num:numero("DEV",devis),client:client.value,ttc:c.ttc};
 
 devis.push(d);
 localStorage.setItem("devis",JSON.stringify(devis));
 
 sendToSheet("DEVIS",d.num,d.client,d.ttc);
-
 afficher();
 }
 
@@ -179,18 +171,12 @@ let factures=JSON.parse(localStorage.getItem("factures"))||[];
 
 function toFacture(){
 let c=calcul();
-
-let f={
-num:numero("FAC",factures),
-client:document.getElementById("client").value,
-ttc:c.ttc
-};
+let f={num:numero("FAC",factures),client:client.value,ttc:c.ttc};
 
 factures.push(f);
 localStorage.setItem("factures",JSON.stringify(factures));
 
 sendToSheet("FACTURE",f.num,f.client,f.ttc);
-
 afficher();
 }
 
@@ -202,7 +188,7 @@ let draw=false;
 canvas.addEventListener("mousedown",()=>draw=true);
 canvas.addEventListener("mouseup",()=>draw=false);
 canvas.addEventListener("mousemove",(e)=>{
-if(!draw) return;
+if(!draw)return;
 ctx.lineWidth=2;
 ctx.lineTo(e.offsetX,e.offsetY);
 ctx.stroke();
@@ -212,133 +198,116 @@ function clearSign(){
 ctx.clearRect(0,0,canvas.width,canvas.height);
 }
 
-// ================= PDF (STABLE) =================
+// ================= MODE PAIEMENT =================
+document.getElementById("modePaiement").addEventListener("change", function(){
+document.getElementById("paiement3x").style.display =
+this.value==="3fois"?"block":"none";
+});
+
+// ================= PDF PRO =================
 function pdf(){
 
 const { jsPDF } = window.jspdf;
-let doc = new jsPDF();
+let doc=new jsPDF();
 
-let client = document.getElementById("client").value;
-let lignes = document.querySelectorAll("#lignes div");
+let c=calcul();
+let y=20;
 
-let y = 20;
-let total = 0;
-
-// 🔥 ENTETE
+// ENTETE
 doc.setFontSize(16);
-doc.text("MGP ELEC", 10, 10);
+doc.text("MGP ELEC",10,10);
 
 doc.setFontSize(10);
-doc.text("314 chemin jeanson", 10, 15);
-doc.text("97440 Saint-André", 10, 20);
-doc.text("SIREN : 929986180", 10, 25);
+doc.text("314 chemin jeanson",10,15);
+doc.text("97440 Saint-André",10,20);
+doc.text("SIREN : 929986180",10,25);
 
-doc.text("Devis N° : " + Date.now(), 140, 10);
-doc.text("Date : " + new Date().toLocaleDateString(), 140, 15);
+doc.text("Client : "+client.value,10,35);
+doc.text("Date : "+new Date().toLocaleDateString(),140,15);
 
-doc.text("Client : " + client, 10, 35);
+// TABLEAU
+y=45;
 
-// 🔥 TABLEAU
-y = 45;
+doc.text("Désignation",10,y);
+doc.text("Qté",100,y);
+doc.text("PU",130,y);
+doc.text("Total",160,y);
 
-doc.setFontSize(10);
-doc.text("Désignation", 10, y);
-doc.text("Qté", 100, y);
-doc.text("PU €", 120, y);
-doc.text("TVA", 145, y);
-doc.text("Total €", 170, y);
+y+=5;
+doc.line(10,y,200,y);
+y+=5;
 
-y += 5;
-doc.line(10, y, 200, y);
-y += 5;
+document.querySelectorAll("#lignes div").forEach(l=>{
+let nom=l.children[0].value||"";
+let qte=parseFloat(l.children[1].value)||0;
+let prix=parseFloat(l.children[2].value)||0;
+let t=qte*prix;
 
-// 🔥 LIGNES
-lignes.forEach(l => {
+doc.text(nom,10,y);
+doc.text(qte.toString(),100,y);
+doc.text(prix.toFixed(2),130,y);
+doc.text(t.toFixed(2),160,y);
 
-let nom = l.children[0].value || "";
-let qte = parseFloat(l.children[1].value) || 0;
-let prix = parseFloat(l.children[2].value) || 0;
-
-let totalLigne = qte * prix;
-
-doc.text(nom, 10, y);
-doc.text(qte.toString(), 100, y);
-doc.text(prix.toFixed(2), 120, y);
-doc.text("8.5%", 145, y);
-doc.text(totalLigne.toFixed(2), 170, y);
-
-y += 8;
-total += totalLigne;
-
+y+=8;
 });
 
-// 🔥 CALCULS
-let remise = total * 0.30;
-let totalHT = total - remise;
-let tva = totalHT * 0.085;
-let ttc = totalHT + tva;
+// TOTAUX
+y+=10;
+doc.text("Sous-total HT : "+c.total.toFixed(2),130,y);
+y+=8;
+doc.text("Remise : -"+c.remiseVal.toFixed(2),130,y);
+y+=8;
+doc.text("HT : "+c.ht.toFixed(2),130,y);
+y+=8;
+doc.text("TVA : "+c.tvaVal.toFixed(2),130,y);
+y+=8;
+doc.text("TTC : "+c.ttc.toFixed(2),130,y);
 
-y += 10;
+// 🔥 MODE PAIEMENT
+let mode=document.getElementById("modePaiement").value;
+y+=15;
 
-// 🔥 TOTAUX
-doc.text("Sous-total HT : " + total.toFixed(2) + " €", 130, y);
-y += 8;
-doc.text("Remise HT (30%) : -" + remise.toFixed(2) + " €", 130, y);
-y += 8;
-doc.text("Total HT : " + totalHT.toFixed(2) + " €", 130, y);
-y += 8;
-doc.text("TVA 8.5% : " + tva.toFixed(2) + " €", 130, y);
-y += 8;
+if(mode==="acompte"){
+let acompte=c.ttc*0.40;
+let reste=c.ttc-acompte;
 
-doc.setFontSize(12);
-doc.text("TOTAL TTC : " + ttc.toFixed(2) + " €", 130, y);
+doc.text("Acompte (40%) : "+acompte.toFixed(2)+" €",10,y);
+y+=8;
+doc.text("Reste : "+reste.toFixed(2)+" €",10,y);
+}
 
-// 🔥 MENTIONS
-y += 15;
+if(mode==="3fois"){
+let p1=p1.value;
+let p2=p2.value;
+let p3=p3.value;
 
-doc.setFontSize(8);
-doc.text("Pour être accepté, le devis doit être daté, signé et suivi de la mention 'Bon pour accord'.", 10, y);
+doc.text("Signature ("+p1+"%) : "+(c.ttc*p1/100).toFixed(2)+" €",10,y);
+y+=8;
+doc.text("Milieu ("+p2+"%) : "+(c.ttc*p2/100).toFixed(2)+" €",10,y);
+y+=8;
+doc.text("Fin ("+p3+"%) : "+(c.ttc*p3/100).toFixed(2)+" €",10,y);
+}
 
-y += 10;
-doc.text("Banque: BoursoBank - BIC: BOUS FRPP XXX", 10, y);
-y += 5;
-doc.text("IBAN: FR76 4061 8803 3500 0407 1416 017", 10, y);
+// SIGNATURE
+let img=canvas.toDataURL("image/png");
+doc.addImage(img,"PNG",10,y+10,60,20);
 
-y += 10;
-doc.text("MGP ELEC - SIREN 929986180 - RC PRO - ASSURANCE DECENNALE APRIL: W4183819", 10, y);
-
-// 🔥 SIGNATURE
-y += 20;
-doc.text("Signature client :", 10, y);
-
-let canvas = document.getElementById("signature");
-let img = canvas.toDataURL("image/png");
-doc.addImage(img, "PNG", 10, y + 5, 60, 20);
-
-y += 30;
-doc.text("Bon pour accord", 10, y);
-
-// 🔥 EXPORT
-doc.save("Devis_MGP_ELEC.pdf");
+doc.save("MGP_ELEC.pdf");
 
 }
 
 // ================= AFFICHAGE =================
 function afficher(){
-let div=document.getElementById("historique");
-div.innerHTML="";
-
+historique.innerHTML="";
 devis.forEach(d=>{
-div.innerHTML+=`📄 ${d.num} - ${d.client} - ${d.ttc.toFixed(2)}€<br>`;
+historique.innerHTML+=`📄 ${d.num} - ${d.client} - ${d.ttc.toFixed(2)}€<br>`;
 });
-
 factures.forEach(f=>{
-div.innerHTML+=`🧾 ${f.num} - ${f.client} - ${f.ttc.toFixed(2)}€<br>`;
+historique.innerHTML+=`🧾 ${f.num} - ${f.client} - ${f.ttc.toFixed(2)}€<br>`;
 });
 }
 
 afficher();
-afficherClients();
 
 </script>
 

@@ -62,26 +62,52 @@ canvas { border:1px solid #000; width:100%; }
 <script>
 
 // ================= CLIENTS =================
+// ================= CLIENTS =================
 let clients = JSON.parse(localStorage.getItem("clients")) || [];
 
 function saveClient(){
-let nom = document.getElementById("client").value;
-if(!nom) return alert("Nom client vide");
-clients.push(nom);
-localStorage.setItem("clients", JSON.stringify(clients));
-afficherClients();
+    let nom = document.getElementById("client").value;
+
+    if(!nom){
+        alert("Entre un nom client");
+        return;
+    }
+
+    // éviter doublons
+    if(!clients.includes(nom)){
+        clients.push(nom);
+        localStorage.setItem("clients", JSON.stringify(clients));
+    }
+
+    afficherClients();
+
+    alert("✅ Client enregistré");
 }
 
 function afficherClients(){
-let select = document.getElementById("clientList");
-select.innerHTML="";
-clients.forEach(c=>{
-select.innerHTML+=`<option>${c}</option>`;
-});
+    let select = document.getElementById("clientList");
+
+    select.innerHTML = "<option value=''>-- Sélectionner un client --</option>";
+
+    clients.forEach(c=>{
+        let option = document.createElement("option");
+        option.value = c;
+        option.textContent = c;
+        select.appendChild(option);
+    });
 }
 
 function selectClient(){
-document.getElementById("client").value = document.getElementById("clientList").value;
+    let selected = document.getElementById("clientList").value;
+
+    if(selected){
+        document.getElementById("client").value = selected;
+    }
+}
+
+// 🔥 IMPORTANT : charger au démarrage
+window.onload = function(){
+    afficherClients();
 }
 
 // ================= LIGNES =================

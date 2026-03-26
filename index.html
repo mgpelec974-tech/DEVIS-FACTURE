@@ -2,19 +2,20 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<title>MGP ELEC - PRO</title>
+<title>MGP ELEC - EXPERT</title>
 
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <style>
-body { font-family: Arial; margin: 10px; background:#f5f5f5; }
-.card { background:white; padding:15px; border-radius:10px; margin:10px 0; }
-input, select { padding:10px; margin:5px 0; width:100%; }
-button { padding:12px; margin:5px 0; width:100%; background:#d62828; color:white; border:none; border-radius:8px; }
+body { font-family: Arial; background:#f5f5f5; margin:10px; }
+.card { background:white; padding:15px; margin:10px 0; border-radius:10px; }
+input, select { width:100%; padding:10px; margin:5px 0; }
+button { width:100%; padding:12px; margin:5px 0; background:#d62828; color:white; border:none; border-radius:8px; }
 .logo { text-align:center; }
 .logo img { height:80px; }
+canvas { border:1px solid #000; width:100%; }
 </style>
 </head>
 
@@ -24,7 +25,7 @@ button { padding:12px; margin:5px 0; width:100%; background:#d62828; color:white
 <img src="logo-png.png">
 </div>
 
-<h1 style="text-align:center;">MGP ELEC ⚡</h1>
+<h2 style="text-align:center;">MGP ELEC ⚡</h2>
 
 <div class="card">
 
@@ -37,12 +38,19 @@ button { padding:12px; margin:5px 0; width:100%; background:#d62828; color:white
 <div id="lignes"></div>
 <button onclick="addLigne()">➕ Ajouter ligne</button>
 
+<label>Remise (%)</label>
+<input id="remise" value="30">
+
 <label>TVA (%)</label>
 <input id="tva" value="8.5">
 
+<h3>Signature client</h3>
+<canvas id="signature" height="100"></canvas>
+<button onclick="clearSign()">Effacer signature</button>
+
 <button onclick="saveDevis()">💾 Devis</button>
 <button onclick="toFacture()">🧾 Facture</button>
-<button onclick="pdf()">📄 PDF PRO</button>
+<button onclick="pdf()">📄 PDF EXPERT</button>
 
 </div>
 
@@ -77,99 +85,96 @@ client.value = clientList.value;
 
 // LIGNES
 function addLigne(){
-let div = document.createElement("div");
-div.innerHTML = `
+let div=document.createElement("div");
+div.innerHTML=`
 <input placeholder="Désignation">
-<input type="number" placeholder="Prix €">
+<input type="number" placeholder="Quantité">
+<input type="number" placeholder="Prix unitaire €">
 `;
 lignes.appendChild(div);
 }
-
 addLigne();
 
 // CALCUL
-function totalHT(){
+function calcul(){
 let total=0;
+
 document.querySelectorAll("#lignes div").forEach(l=>{
-total+=parseFloat(l.children[1].value||0);
+let qte=parseFloat(l.children[1].value||0);
+let prix=parseFloat(l.children[2].value||0);
+total+=qte*prix;
 });
-return total;
+
+let remiseVal=total*(remise.value/100);
+let ht=total-remiseVal;
+let tvaVal=ht*(tva.value/100);
+let ttc=ht+tvaVal;
+
+return {total,remiseVal,ht,tvaVal,ttc};
 }
 
 // NUMERO
 function numero(type,list){
-return type+"-"+String(list.length+1).padStart(3,"0");
+return type+"-"+String(list.length+1).padStart(4,"0");
 }
 
 // GOOGLE SHEET
 function sendToSheet(type, numero, client, montant){
-
 fetch("https://script.google.com/macros/s/AKfycbxTjNb-hGf0kc5XaLTQWslhc6tRuwPwpmz7IcJzWfqxr4CWkEfX7tr4UKVW-xP3CL5W/exec",{
 method:"POST",
 headers:{"Content-Type":"application/json"},
 body:JSON.stringify({type,numero,client,montant})
 });
-
 }
 
 // DEVIS
-let devis = JSON.parse(localStorage.getItem("devis")) || [];
+let devis=JSON.parse(localStorage.getItem("devis"))||[];
 
 function saveDevis(){
-let ht = totalHT();
-let tva = 8.5;
-let remise = ht*0.30;
-let totalHTremise = ht-remise;
-let ttc = totalHTremise*(1+tva/100);
-
-let d={
-num:numero("DEV",devis),
-client:client.value,
-ttc
-};
-
+let c=calcul();
+let d={num:numero("DEV",devis),client:client.value,ttc:c.ttc};
 devis.push(d);
 localStorage.setItem("devis",JSON.stringify(devis));
-
-sendToSheet("DEVIS", d.num, d.client, d.ttc);
-
+sendToSheet("DEVIS",d.num,d.client,d.ttc);
 afficher();
 }
 
 // FACTURE
-let factures = JSON.parse(localStorage.getItem("factures")) || [];
+let factures=JSON.parse(localStorage.getItem("factures"))||[];
 
 function toFacture(){
-let ht = totalHT();
-let tva = 8.5;
-let remise = ht*0.30;
-let totalHTremise = ht-remise;
-let ttc = totalHTremise*(1+tva/100);
-
-let f={
-num:numero("FAC",factures),
-client:client.value,
-ttc
-};
-
+let c=calcul();
+let f={num:numero("FAC",factures),client:client.value,ttc:c.ttc};
 factures.push(f);
 localStorage.setItem("factures",JSON.stringify(factures));
-
-sendToSheet("FACTURE", f.num, f.client, f.ttc);
-
+sendToSheet("FACTURE",f.num,f.client,f.ttc);
 afficher();
 }
 
-// PDF PRO
+// SIGNATURE
+let canvas=document.getElementById("signature");
+let ctx=canvas.getContext("2d");
+let draw=false;
+
+canvas.onmousedown=()=>draw=true;
+canvas.onmouseup=()=>draw=false;
+canvas.onmousemove=e=>{
+if(!draw)return;
+ctx.lineWidth=2;
+ctx.lineTo(e.offsetX,e.offsetY);
+ctx.stroke();
+};
+
+function clearSign(){
+ctx.clearRect(0,0,canvas.width,canvas.height);
+}
+
+// PDF EXPERT
 async function pdf(){
 
 const { jsPDF } = window.jspdf;
-let doc = new jsPDF();
+let doc=new jsPDF();
 
-let total=0;
-let y=20;
-
-// LOGO
 let img=new Image();
 img.src="logo-png.png";
 
@@ -177,6 +182,7 @@ img.onload=function(){
 
 doc.addImage(img,"PNG",10,5,50,20);
 
+doc.setFontSize(16);
 doc.text("DEVIS",150,15);
 
 doc.setFontSize(10);
@@ -186,50 +192,55 @@ doc.text("SIREN 929986180",10,40);
 
 doc.text("Client : "+client.value,10,50);
 
-y=65;
-
-// TABLE
+let y=65;
 doc.text("Désignation",10,y);
-doc.text("Prix",150,y);
+doc.text("Qté",100,y);
+doc.text("PU",130,y);
+doc.text("Total",160,y);
 
 y+=5;
 doc.line(10,y,200,y);
 y+=5;
 
+let total=0;
+
 document.querySelectorAll("#lignes div").forEach(l=>{
 let nom=l.children[0].value;
-let prix=parseFloat(l.children[1].value||0);
+let qte=parseFloat(l.children[1].value||0);
+let prix=parseFloat(l.children[2].value||0);
+let t=qte*prix;
 
 doc.text(nom,10,y);
-doc.text(prix+" €",150,y);
+doc.text(qte.toString(),100,y);
+doc.text(prix.toFixed(2),130,y);
+doc.text(t.toFixed(2),160,y);
 
 y+=8;
-total+=prix;
+total+=t;
 });
 
-// CALCULS
-let remise=total*0.30;
-let ht=total-remise;
-let tva=ht*0.085;
-let ttc=ht+tva;
+let c=calcul();
 
 y+=10;
 
-doc.text("Sous-total HT : "+total.toFixed(2),130,y);
+doc.text("Sous-total : "+c.total.toFixed(2),130,y);
 y+=8;
-doc.text("Remise 30% : -"+remise.toFixed(2),130,y);
+doc.text("Remise : -"+c.remiseVal.toFixed(2),130,y);
 y+=8;
-doc.text("Total HT : "+ht.toFixed(2),130,y);
+doc.text("HT : "+c.ht.toFixed(2),130,y);
 y+=8;
-doc.text("TVA : "+tva.toFixed(2),130,y);
+doc.text("TVA : "+c.tvaVal.toFixed(2),130,y);
 y+=8;
-doc.text("TOTAL TTC : "+ttc.toFixed(2),130,y);
+doc.text("TTC : "+c.ttc.toFixed(2),130,y);
 
 y+=20;
 
-doc.text("Bon pour accord",10,y);
+let imgSign=canvas.toDataURL("image/png");
+doc.addImage(imgSign,"PNG",10,y,60,20);
 
-doc.save("Devis_MGP_ELEC.pdf");
+doc.text("Bon pour accord",10,y+25);
+
+doc.save("MGP_ELEC_EXPERT.pdf");
 
 }
 
@@ -239,10 +250,10 @@ doc.save("Devis_MGP_ELEC.pdf");
 function afficher(){
 historique.innerHTML="";
 devis.forEach(d=>{
-historique.innerHTML+=`📄 ${d.num} - ${d.client} - ${d.ttc}€<br>`;
+historique.innerHTML+=`📄 ${d.num} - ${d.client} - ${d.ttc.toFixed(2)}€<br>`;
 });
 factures.forEach(f=>{
-historique.innerHTML+=`🧾 ${f.num} - ${f.client} - ${f.ttc}€<br>`;
+historique.innerHTML+=`🧾 ${f.num} - ${f.client} - ${f.ttc.toFixed(2)}€<br>`;
 });
 }
 

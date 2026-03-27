@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
-  @import url('https://script.google.com/macros/s/AKfycbyA1Ea4KKOfxkjrK1rLLuDt5f2ZtH_b7lqYDpn9-K3Uejacit52iQIlM7iEuG04ete0/exec');
+  @import url('https://script.google.com/macros/s/AKfycbwb3Sxg6cU1Co9gdrZ4mtLpF8F5xn9oHuqJUM3FGk89n9T0w7cSOCDuD134cXhVMNsQ/exec');
 
   :root {
     --rouge: #D62828;
@@ -487,10 +487,11 @@
   <div class="card">
     <div class="card-title">Google Sheets (Grand Livre)</div>
     <div class="sheets-config">
-      <p><strong>📌 Configuration Google Sheets :</strong> Pour synchroniser vos données, suivez ces étapes :</p>
-      <p>1. Créez un Google Sheet et notez son ID (dans l'URL entre /d/ et /edit)</p>
-      <p>2. Créez un projet Apps Script (Extensions → Apps Script) avec un webhook POST</p>
-      <p>3. Publiez le script comme application web et copiez l'URL ici</p>
+      <p><strong>📌 Configuration Grand Livre Google Sheets — Étapes :</strong></p>
+      <p>1. <strong>Créez un Google Sheet</strong> et copiez son ID (dans l'URL : docs.google.com/spreadsheets/d/<u>ID_ICI</u>/edit)</p>
+      <p>2. Dans le Sheet → <strong>Extensions → Apps Script</strong> → collez le code ci-dessous</p>
+      <p>3. <strong>Publiez</strong> le script : Déployer → Nouveau déploiement → Application Web → "Tout le monde (même anonyme)" → copiez l'URL</p>
+      <p>4. ⚠️ <strong>Note CORS</strong> : Google bloque la lecture des réponses depuis un navigateur, mais <em>les données sont bien envoyées</em>. Si "Test envoyé" s'affiche, votre script reçoit les données. Vérifiez l'onglet "Grand Livre" de votre Sheet.</p>
     </div>
     <div class="form-grid">
       <div>
@@ -509,29 +510,66 @@
     <div id="sheets-status" style="margin-top:12px; font-size:13px; color:var(--gris-dark);"></div>
     <div style="margin-top:16px; background:#f8f9fa; border-radius:8px; padding:14px;">
       <p style="font-size:12px; font-weight:700; text-transform:uppercase; color:var(--gris-dark); margin-bottom:8px;">Code Apps Script à copier :</p>
-      <pre style="font-size:11px; color:#333; white-space:pre-wrap; line-height:1.6;">function doPost(e) {
-  const data = JSON.parse(e.postData.contents);
-  const ss = SpreadsheetApp.openById(data.sheetId);
-  
-  if (data.type === 'facture') {
-    const sh = ss.getSheetByName('Grand Livre') || ss.insertSheet('Grand Livre');
-    if (sh.getLastRow() === 0) {
-      sh.appendRow(['N°','Date','Client','Description','HT','TVA','TTC','Statut','Mode Paiement']);
+      <pre style="font-size:11px; color:#333; white-space:pre-wrap; line-height:1.6;">// ⚠️ IMPORTANT : Lors de la publication, choisir :
+// - "Exécuter en tant que" : Moi-même
+// - "Qui a accès" : Tout le monde (même anonyme)
+
+function doPost(e) {
+  try {
+    const data = JSON.parse(e.postData.contents);
+    const ss = SpreadsheetApp.openById(data.sheetId);
+
+    if (data.type === 'test') {
+      return buildResponse('Test OK');
     }
-    // Mettre à jour ou ajouter
-    sh.appendRow([data.num, data.date, data.client, data.titre,
-      data.ht, data.tva, data.ttc, data.statut, data.modePaiement]);
-  }
-  
-  if (data.type === 'materiel') {
-    const sh = ss.getSheetByName('Matériaux') || ss.insertSheet('Matériaux');
-    if (sh.getLastRow() === 0) {
-      sh.appendRow(['Désignation','Quantité','Prix unitaire','Total']);
+
+    if (data.type === 'facture') {
+      const sh = ss.getSheetByName('Grand Livre') || ss.insertSheet('Grand Livre');
+      if (sh.getLastRow() === 0) {
+        sh.appendRow(['N°','Date','Client','Titre','HT','TVA','TTC','Statut','Mode Paiement','MAJ']);
+      }
+      // Chercher ligne existante pour mise à jour
+      const values = sh.getDataRange().getValues();
+      let rowFound = -1;
+      for (let i = 1; i < values.length; i++) {
+        if (values[i][0] === data.num) { rowFound = i + 1; break; }
+      }
+      const row = [data.num, data.date, data.client, data.titre,
+        data.ht, data.tva, data.ttc, data.statut, data.modePaiement,
+        new Date().toLocaleString('fr-FR')];
+      if (rowFound > 0) {
+        sh.getRange(rowFound, 1, 1, row.length).setValues([row]);
+      } else {
+        sh.appendRow(row);
+      }
+
+      // Onglet matériel
+      if (data.lignes && data.lignes.length) {
+        const shM = ss.getSheetByName('Matériaux') || ss.insertSheet('Matériaux');
+        if (shM.getLastRow() === 0) {
+          shM.appendRow(['N° Facture','Désignation','Qté','Prix unit.','Total HT']);
+        }
+        data.lignes.forEach(l => {
+          shM.appendRow([data.num, l.desc, l.qte, l.pu, (l.qte||0)*(l.pu||0)]);
+        });
+      }
     }
-    data.lignes.forEach(l => sh.appendRow([l.desc, l.qte, l.pu, l.total]));
+
+    return buildResponse('OK');
+  } catch(err) {
+    return buildResponse('Erreur: ' + err.message);
   }
-  
-  return ContentService.createTextOutput('OK');
+}
+
+function buildResponse(msg) {
+  return ContentService
+    .createTextOutput(JSON.stringify({status: msg}))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+// Nécessaire pour les requêtes OPTIONS (preflight CORS)
+function doGet(e) {
+  return buildResponse('MGP ELEC Script actif');
 }</pre>
     </div>
   </div>
@@ -1466,8 +1504,11 @@ async function syncFactureSheets(facture) {
   const sheetId = db.config?.sheetsId;
   if (!url || !sheetId) return;
   try {
+    // Google Apps Script nécessite mode no-cors (CORS bloqué par navigateur)
     await fetch(url, {
       method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify({
         type: 'facture',
         sheetId,
@@ -1483,30 +1524,58 @@ async function syncFactureSheets(facture) {
         lignes: facture.lignes
       })
     });
-  } catch(e) { /* silencieux */ }
+    // Avec no-cors on ne peut pas lire la réponse, mais l'envoi fonctionne
+  } catch(e) {
+    console.warn('Sheets sync error:', e);
+  }
 }
 
 async function testerSheets() {
   const url = document.getElementById('cfg-sheets-url').value;
   const sheetId = document.getElementById('cfg-sheets-id').value;
   const status = document.getElementById('sheets-status');
-  if (!url) { status.textContent = '⚠️ URL manquante'; return; }
-  status.textContent = '⏳ Test en cours...';
+  if (!url) { status.textContent = '⚠️ URL manquante'; status.style.color = 'var(--orange)'; return; }
+  if (!sheetId) { status.textContent = '⚠️ ID Google Sheet manquant'; status.style.color = 'var(--orange)'; return; }
+  if (!url.includes('script.google.com')) {
+    status.textContent = '⚠️ L\'URL doit être une URL Google Apps Script (script.google.com/macros/s/...)';
+    status.style.color = 'var(--orange)'; return;
+  }
+  status.textContent = '⏳ Envoi du test en cours...';
+  status.style.color = 'var(--gris-dark)';
   try {
-    await fetch(url, { method: 'POST', body: JSON.stringify({type:'test', sheetId}) });
-    status.textContent = '✅ Connexion réussie !';
+    // Google Apps Script exige mode no-cors depuis un navigateur (limitation CORS)
+    // L\'envoi fonctionne mais on ne peut pas lire la réponse — c\'est normal
+    await fetch(url, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ type: 'test', sheetId, message: 'Test depuis MGP ELEC' })
+    });
+    // Si on arrive ici sans exception, la requête est partie
+    status.innerHTML = '✅ Requête envoyée au script ! <br><small style="color:#666">Note : avec Google Apps Script, la réponse n\'est pas lisible depuis le navigateur (CORS), mais si votre script est bien configuré, les données sont bien reçues. Vérifiez votre Google Sheet.</small>';
     status.style.color = 'var(--vert)';
   } catch(e) {
-    status.textContent = '❌ Erreur de connexion';
+    status.textContent = '❌ Erreur réseau : ' + e.message + ' — Vérifiez que l\'URL est correcte.';
     status.style.color = 'var(--rouge)';
   }
 }
 
 async function syncAllSheets() {
   const url = db.config?.sheetsUrl;
-  if (!url) { toast('Configurez d\'abord l\'URL Sheets', 'error'); return; }
-  for (const f of db.factures) await syncFactureSheets(f);
-  toast('Synchronisation terminée !');
+  const sheetId = db.config?.sheetsId;
+  if (!url || !sheetId) { toast('Configurez d\'abord l\'URL et l\'ID Sheets', 'error'); return; }
+  const status = document.getElementById('sheets-status');
+  status.textContent = '⏳ Synchronisation en cours (' + db.factures.length + ' factures)...';
+  status.style.color = 'var(--gris-dark)';
+  try {
+    for (const f of db.factures) await syncFactureSheets(f);
+    status.textContent = '✅ ' + db.factures.length + ' facture(s) envoyée(s) vers Google Sheets !';
+    status.style.color = 'var(--vert)';
+    toast('Synchronisation terminée !');
+  } catch(e) {
+    status.textContent = '❌ Erreur : ' + e.message;
+    status.style.color = 'var(--rouge)';
+  }
 }
 
 // ═══════════════════════════════════════
